@@ -6,6 +6,11 @@ from client.response import EventType, StreamEvent, TextDelta, TokenUsage, ToolC
 from config.config import Config
 
 
+def _cached_tokens(usage: Any) -> int:
+    # many OpenAI-compatible providers send prompt_tokens_details as null
+    details = getattr(usage, "prompt_tokens_details", None)
+    return (details.cached_tokens or 0) if details else 0
+
 class LLMClient:
     def __init__(self,config:Config) -> None:
         self._client: AsyncOpenAI | None = None
@@ -115,7 +120,7 @@ class LLMClient:
                     prompt_tokens=chunk.usage.prompt_tokens,
                     completion_tokens=chunk.usage.completion_tokens,
                     total_tokens=chunk.usage.total_tokens,
-                    cached_tokens=chunk.usage.prompt_tokens_details.cached_tokens,
+                    cached_tokens=_cached_tokens(chunk.usage),
                 )
 
             if not chunk.choices:
@@ -208,7 +213,7 @@ class LLMClient:
                 prompt_tokens=response.usage.prompt_tokens,
                 completion_tokens=response.usage.completion_tokens,
                 total_tokens=response.usage.total_tokens,
-                cached_tokens=response.usage.prompt_tokens_details.cached_tokens,
+                cached_tokens=_cached_tokens(response.usage),
             )
 
         return StreamEvent(
