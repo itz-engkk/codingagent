@@ -29,6 +29,11 @@ DANGEROUS_PATTERNS = [
     r"rm\s+(-rf?|--recursive)\s+[/~]",
     r"rm\s+-rf?\s+\*",
     r"rmdir\s+[/~]",
+    # Windows file system destruction
+    r"\bdel\s+.*/[sq]\b",
+    r"\b(rd|rmdir)\s+.*/s\b",
+    r"\bformat\s+[a-z]:",
+    r"remove-item\s+.*-recurse",
     # Disk operations
     r"dd\s+if=",
     r"mkfs",
@@ -57,14 +62,14 @@ DANGEROUS_PATTERNS = [
 SAFE_PATTERNS = [
     # Information commands
     r"^(ls|dir|pwd|cd|echo|cat|head|tail|less|more|wc)(\s|$)",
-    r"^(find|locate|which|whereis|file|stat)(\s|$)",
+    r"^(locate|which|whereis|file|stat)(\s|$)",
     # Development tools (read-only)
     r"^git\s+(status|log|diff|show|branch|remote|tag)(\s|$)",
     r"^(npm|yarn|pnpm)\s+(list|ls|outdated)(\s|$)",
     r"^pip\s+(list|show|freeze)(\s|$)",
     r"^cargo\s+(tree|search)(\s|$)",
     # Text processing (usually safe)
-    r"^(grep|awk|sed|cut|sort|uniq|tr|diff|comm)(\s|$)",
+    r"^(grep|cut|sort|uniq|tr|diff|comm)(\s|$)",
     # System info
     r"^(date|cal|uptime|whoami|id|groups|hostname|uname)(\s|$)",
     r"^(env|printenv|set)$",
@@ -81,7 +86,15 @@ def is_dangerous_command(command: str) -> bool:
     return False
 
 
+# Chaining, piping, redirection or substitution can hide arbitrary commands
+# behind a safe-looking prefix such as "ls && ..."
+SHELL_METACHARS = re.compile(r"[;&|<>`\n]|\$\(")
+
+
 def is_safe_command(command: str) -> bool:
+    if SHELL_METACHARS.search(command):
+        return False
+
     for pattern in SAFE_PATTERNS:
         if re.search(pattern, command, re.IGNORECASE):
             return True
@@ -131,16 +144,13 @@ class ApprovalManager:
             return ApprovalDecision.APPROVED
 
         if context.command:
-            decision = self._assess_command_safety(context.command)
-            if decision != ApprovalDecision.NEEDS_CONFIRMATION:
-                return decision
+            return self._assess_command_safety(context.command)
 
+        cwd = self.cwd.resolve()
         for path in context.affected_paths:
-            path_decision = ApprovalDecision.NEEDS_CONFIRMATION
-            if path.is_relative_to(self.cwd):
-                path_decision = ApprovalDecision.APPROVED
-            else:
-                return path_decision
+            # resolve so "../" segments can't escape cwd
+            if not path.resolve().is_relative_to(cwd):
+                return ApprovalDecision.NEEDS_CONFIRMATION
 
         if context.is_dangerous:
             if self.approval_policy == ApprovalPolicy.YOLO:

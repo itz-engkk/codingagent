@@ -14,7 +14,8 @@ class ToolRegistry:
     def __init__(self,config:Config):
         self.config=config
         self._tools: dict[str, Tool] = {}
-        
+        self._mcp_tools: dict[str, Tool] = {}
+
     @property
     def connected_mcp_servers(self) -> list[Tool]:
         return self._mcp_tools.values()

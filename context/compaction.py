@@ -1,6 +1,6 @@
 from typing import Any
 from client.llm_client import LLMClient
-from client.response import StreamEventType, TokenUsage
+from client.response import EventType, TokenUsage
 from context.manager import ContextManager
 from prompt.systemprompt import get_compression_prompt
 
@@ -80,7 +80,7 @@ class ChatCompactor:
                 compression_messages,
                 stream=False,
             ):
-                if event.type == StreamEventType.MESSAGE_COMPLETE:
+                if event.type == EventType.MESSAGE_COMPLETE:
                     usage = event.usage
                     summary += event.text_delta.content
 
